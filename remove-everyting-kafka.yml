@@ -1,0 +1,162 @@
+---
+
+- name: Check if Zookeeper Service Exists
+  stat: path=/etc/init.d/confluent-zookeeper.service
+  register: service_status
+
+- name: Stop Zookeeper  Service
+  service: name=confluent-zookeeper.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+- name: Check if Confluent Kafka Broker Service Exists
+  stat: path=/etc/init.d/confluent-kafka.service
+  register: service_status
+
+- name: Stop Confluent Kafka Broker Service
+  service: name=confluent-kafka.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+- name: Check if Confluent Server Service Exists
+  stat: path=/etc/init.d/confluent-server.service
+  register: service_status
+
+- name: Stop Confluent Server  Service
+  service: name=kafka-confluent-server.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+- name: Check if Schema Registry Service Exists
+  stat: path=/etc/init.d/confluent-schema-registry.service
+  register: service_status
+
+- name: Stop Schema Registry Service
+  service: name=confluent-schema-registry.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+- name: Check if Connect Service Exists
+  stat: path=/etc/init.d/confluent-kafka-connect.service
+  register: service_status
+
+- name: Stop Connect Service
+  service: name=confluent-kafka-connect.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+- name: Check if REST Service Exists
+  stat: path=/etc/init.d/kafka-rest.service
+  register: service_status
+
+- name: Stop REST Service
+  service: name=kafka-rest.service.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+- name: Check if C3 Service Exists
+  stat: path=/etc/init.d/confluent-control-center.service
+  register: service_status
+
+- name: Stop C3 Service
+  service: name=confluent-control-center.service state=stopped
+  when: service_status.stat.exists
+  register: service_stopped
+
+
+- name: Create /temp/cp Directory
+  file:
+    path: /tmp/cp/
+    state: directory
+
+- name: Create /tmp/kafka Directory
+  file:
+    path: /tmp/kafka/
+    state: directory
+
+- name: Create /tmp/confluent Directory
+  file:
+    path: /tmp/confluent/
+    state: directory
+
+- name: Copy Kafka override directories
+  file:
+      src:  /etc/systemd/system/confluent-*/
+      dest: /tmp/cp/systemd/
+      # owner: root
+      # group: root
+
+- name: Copy Kafka directories
+  file:
+      src:: /etc/kafka/
+      dest: /tmp/kafka/
+      # owner: root
+      # group: root
+
+- name: Copy Confluent directories
+  file:
+      src:: /etc/confluent/
+      dest: /tmp/confluent/
+      # owner: root
+      # group: root
+
+
+
+- name: remove confluent Kafka  packages
+  yum:
+     name: 'confluent-*'
+                # name: confluent-kafka-2.11-2.0.1cp4-1.noarch
+                # name: confluent-kafka-2.11-5.4.1-1.noarch
+     state: absent
+
+
+
+- name: Remove Kafka directories
+  file:
+      path: /etc/kafka/
+      state: absent
+
+- name: Remove Confluent directories
+  file:
+      path: /etc/confluent/
+      state: absent
+
+
+- name: Remove Confluent directories
+  file:
+        path: /var/log/confluent/
+        state: absent
+
+
+- name: Remove Kafka directories
+  file:
+        path: /var/log/kafka/
+        state: absent
+
+
+- name: Remove Confluent Data directories
+  file:
+          path: /var/lib/confluent/
+          state: absent
+
+
+- name: Remove Kafka data directories
+  file:
+          path: /var/lib/kafka/
+          state: absent
+
+
+- name: Remove Kafka override directories
+  file:
+          path: /etc/systemd/system/confluent-*/
+          state: absent
+
+
+- name: Remove Confluent remaining jars
+  file:
+          path: /usr/share/java
+          state: absent
+
+- name: just force systemd to reread configs
+  systemd:
+      daemon_reload: yes
