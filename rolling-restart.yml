@@ -1,0 +1,102 @@
+---
+
+- name: Zookeeper Host Ordering
+  hosts: zookeeper
+  tags: zookeeper
+  serial: 1
+  tasks:
+      - import_role:
+          name: confluent.variables_handlers
+
+      - name: Zookeeper is Running
+        systemd:
+          name: "{{zookeeper_service_name}}"
+          state: started
+
+      - name: Zookeeper Health Check
+        import_role:
+          name: confluent.zookeeper
+          tasks_from: health_check.yml
+
+      - name: Get Leader/Follower
+        shell: "{{zookeeper_health_check_command}} | grep Mode"
+        args:
+          executable: /bin/bash
+        register: leader_query
+
+      - name: Add host to Follower Group
+        add_host:
+          name: "{{ inventory_hostname }}"
+          group: zookeeper_followers
+        delegate_to: localhost
+        when: '"follower" in leader_query.stdout'
+
+      - name: Add host to Leader Group
+        add_host:
+          name: "{{ inventory_hostname }}"
+          group: zookeeper_leader
+        delegate_to: localhost
+        when: '"leader" in leader_query.stdout'
+
+      - debug:
+          msg: "Leader: {{inventory_hostname}}"
+        when: '"leader" in leader_query.stdout'
+
+- name: Reconfigure Zookeeper
+  hosts: zookeeper_followers,zookeeper_leader
+  environment: "{{ proxy_env }}"
+  tags: zookeeper
+  serial: 1
+  tasks:
+    - import_role:
+        name: confluent.zookeeper
+
+- name: Kafka Broker Host Ordering
+  hosts: kafka_broker
+  tags: kafka_broker
+  # serial: 1
+  serial: 1
+  tasks:
+      - name: Create Ordered Kafka Broker Groups
+        import_tasks: tasks/create_ordered_kafka_groups.yml
+        vars:
+          controller_group: controller
+          non_controller_group: non_controllers
+
+
+- name: Reconfigure Kafka Broker
+  hosts: non_controllers,controller
+  tags: kafka_broker
+  environment: "{{ proxy_env }}"
+  # serial: 1
+  serial: 1
+  tasks:
+    - import_role:
+        name: confluent.kafka_broker
+
+  # tasks:
+    - lineinfile:
+        state: absent
+        dest: /usr/lib/systemd/system/confluent-server.service
+        # dest: /etc/systemd/system/confluent-kafka.service
+        regexp: '^Restart=always'
+
+    - lineinfile:
+        state: present
+        dest: /usr/lib/systemd/system/confluent-server.service
+        # dest: /etc/systemd/system/confluent-kafka.service
+        regexp: '^TimeoutStopSec'
+        insertafter: '^LimitNOFILE'
+        line: 'TimeoutStopSec=600'
+
+    # - systemd: name=confluent-kafka daemon_reload=yes state=restarted
+    - systemd: name=confluent-server daemon_reload=yes state=restarted
+
+    - wait_for:
+        host: '{{ ansible_default_ipv4.address }}'
+        # port: "{{ kafka.broker.port }}"
+        port: 9091
+        timeout: 1800
+        sleep: 60
+        delay: 30
+        state: present
